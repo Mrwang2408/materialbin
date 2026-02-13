@@ -27,8 +27,8 @@ pub const ALL_VERSIONS: [MinecraftVersion; 6] = [
 pub enum MinecraftVersion {
     V1_18_30,
     V1_19_60,
-    V1_21_20,
     V1_20_80,
+    V1_21_20,
     V1_21_110,
     V26_0_24,
 }
@@ -59,6 +59,7 @@ pub struct CompiledMaterialDefinition {
     pub parent_name: Option<String>,
     pub sampler_definitions: IndexMap<String, SamplerDefinition>,
     pub property_fields: IndexMap<String, PropertyField>,
+    pub uniform_overrides: IndexMap<String, String>,
     pub passes: IndexMap<String, Pass>,
 }
 impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
@@ -113,13 +114,16 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             let property_field: PropertyField = buffer.gread(&mut offset)?;
             property_fields.insert(name, property_field);
         }
-        if ctx >= MinecraftVersion::V1_21_110 {
-            if name != "Core/Builtins" {
-                let builtin_count: u16 = buffer.gread_with(&mut offset, LE)?;
-                for _ in 0..builtin_count {
-                    let _key = read_string(buffer, &mut offset)?;
-                    let _value = read_string(buffer, &mut offset)?;
-                }
+        // uniform_overrides is present starting in newer versions; declare it here so it's
+        // available regardless of the conditional parsing branch.
+        let mut uniform_overrides: IndexMap<String, String> = IndexMap::new();
+        if ctx >= MinecraftVersion::V1_21_110 && name != "Core/Builtins" {
+            let builtin_count: u16 = buffer.gread_with(&mut offset, LE)?;
+            uniform_overrides = IndexMap::with_capacity(builtin_count.into());
+            for _ in 0..builtin_count {
+                let uniform_name = read_string(buffer, &mut offset)?;
+                let override_id = read_string(buffer, &mut offset)?;
+                uniform_overrides.insert(uniform_name, override_id);
             }
         }
         let pass_count: u16 = buffer.gread_with(&mut offset, LE)?;
@@ -150,6 +154,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
                 parent_name,
                 sampler_definitions,
                 property_fields,
+                uniform_overrides,
                 passes,
             },
             offset,
@@ -187,7 +192,12 @@ impl CompiledMaterialDefinition {
             property_field.write(writer)?;
         }
         if version >= MinecraftVersion::V1_21_110 && self.name != "Core/Builtins" {
-            writer.write_u16::<LittleEndian>(0)?;
+            let len = self.uniform_overrides.len().try_into()?;
+            writer.write_u16::<LittleEndian>(len)?;
+            for (uniform_name, override_id) in self.uniform_overrides.iter() {
+                write_string(uniform_name, writer)?;
+                write_string(override_id, writer)?;
+            }
         }
         let len = self.passes.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
