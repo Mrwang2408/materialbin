@@ -67,7 +67,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
 
     fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
-        const MAGIC: u64 = 0xA11DA1A;
+        const MAGIC: u64 = 0x0A11DA1A;
         if buffer.gread::<u64>(&mut offset)? != MAGIC {
             return Err(scroll::Error::BadInput {
                 size: offset,
@@ -130,7 +130,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
         let mut passes = IndexMap::with_capacity(pass_count.into());
         for _ in 0..pass_count {
             let name = read_string(buffer, &mut offset)?;
-            let pass: Pass = buffer.gread(&mut offset)?;
+            let pass: Pass = buffer.gread_with(&mut offset, ctx)?;
             passes.insert(name, pass);
         }
         // Just so we parse the whole thing
@@ -166,11 +166,11 @@ impl CompiledMaterialDefinition {
     where
         W: Write,
     {
-        const MAGIC: u64 = 0xA11DA1A;
+        const MAGIC: u64 = 0x0A11DA1A;
         writer.write_u64::<LittleEndian>(MAGIC)?;
         write_string("RenderDragon.CompiledMaterialDefinition", writer)?;
         if version == MinecraftVersion::V26_0_24 {
-            writer.write_u64::<LittleEndian>(23);
+            writer.write_u64::<LittleEndian>(23)?;
         } else {
             writer.write_u64::<LittleEndian>(self.version)?;
         }

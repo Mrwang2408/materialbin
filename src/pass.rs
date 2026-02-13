@@ -50,7 +50,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
             let value = read_string(buffer, &mut offset)?;
             default_flag_values.insert(key, value);
         }
-        let mut framebuffer_binding = None;
+        let mut framebuffer_binding: Option<u32> = None;
         if ctx >= MinecraftVersion::V26_0_24 {
             framebuffer_binding = Some(buffer.gread_with(&mut offset, LE)?);
         }
@@ -96,6 +96,8 @@ impl Pass {
         if version >= MinecraftVersion::V26_0_24 {
             if let Some(fb_binding) = self.framebuffer_binding {
                 writer.write_u32::<LittleEndian>(fb_binding)?;
+            } else {
+                writer.write_u32::<LittleEndian>(0)?;
             }
         }
         let len = self.variants.len().try_into()?;
