@@ -14,7 +14,7 @@ pub struct Pass {
     pub bitset: String,
     pub fallback: String,
     pub default_blendmode: Option<BlendMode>,
-    pub default_flag_values: IndexMap<String, String>,
+    pub default_flag_values: IndexMap<String, Vec<String>>,
     pub framebuffer_binding: Option<u32>,
     pub variants: Vec<Variant>,
 }
@@ -42,13 +42,19 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
         if has_blendmode {
             default_blendmode = Some(buffer.gread_with(&mut offset, ())?);
         }
-
         let flag_dvalue_count: u16 = buffer.gread_with(&mut offset, LE)?;
-        let mut default_flag_values = IndexMap::with_capacity(flag_dvalue_count.into());
+        let mut default_flag_values = IndexMap::with_capacity(flag_dvalue_count.into());        
         for _ in 0..flag_dvalue_count {
             let key = read_string(buffer, &mut offset)?;
-            let value = read_string(buffer, &mut offset)?;
-            default_flag_values.insert(key, value);
+            let vcount: u16 = if ctx >= MinecraftVersion::V26_50_26 {
+                buffer.gread_with(&mut offset, LE)?
+            } else {
+                1
+            };
+            let values: Vec<String> = (0..vcount)
+                .map(|_| read_string(buffer, &mut offset))
+                .collect::<Result<_, _>>()?;
+            default_flag_values.insert(key, values);
         }
         let mut framebuffer_binding: Option<u32> = None;
         if ctx >= MinecraftVersion::V26_0_24 {
@@ -89,9 +95,23 @@ impl Pass {
         })?;
         let len = self.default_flag_values.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
-        for (key, value) in self.default_flag_values.iter() {
-            write_string(key, writer)?;
-            write_string(value, writer)?;
+        for (key, values) in self.default_flag_values.iter() {
+            if version >= MinecraftVersion::V26_50_26 {
+                write_string(key, writer)?;
+
+                // writer.write_u16::<LittleEndian>(values.len().try_into()?)?;
+                // for value in values {
+                //     write_string(value, writer)?;
+                // }
+                
+                writer.write_u16::<LittleEndian>(2)?;  //huh
+                write_string("Off", writer)?;          //huh
+                write_string("On", writer)?;           //huh
+
+            } else {
+                write_string(key, writer)?;
+                write_string(&values[0], writer)?;
+            }
         }
         if version >= MinecraftVersion::V26_0_24 {
             if let Some(fb_binding) = self.framebuffer_binding {

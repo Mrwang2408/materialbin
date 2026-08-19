@@ -14,7 +14,7 @@ pub mod property_field;
 pub mod sampler_definition;
 
 use crate::common::{optional_write, read_bool, read_string, write_string};
-pub const ALL_VERSIONS: [MinecraftVersion; 6] = [
+pub const ALL_VERSIONS: [MinecraftVersion; 8] = [
     // This version causes parsing issues
     MinecraftVersion::V1_18_30,
     MinecraftVersion::V1_19_60,
@@ -22,6 +22,8 @@ pub const ALL_VERSIONS: [MinecraftVersion; 6] = [
     MinecraftVersion::V1_21_20,
     MinecraftVersion::V1_21_110,
     MinecraftVersion::V26_0_24,
+    MinecraftVersion::V26_10_20,
+    MinecraftVersion::V26_50_26,
 ];
 #[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord)]
 pub enum MinecraftVersion {
@@ -31,22 +33,26 @@ pub enum MinecraftVersion {
     V1_21_20,
     V1_21_110,
     V26_0_24,
+    V26_10_20,
+    V26_50_26,
 }
 
 impl Default for MinecraftVersion {
     fn default() -> Self {
-        Self::V1_21_20
+        Self::V26_10_20
     }
 }
 impl std::fmt::Display for MinecraftVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::V1_20_80 => write!(f, "1.20.80"),
-            Self::V1_19_60 => write!(f, "1.19.60"),
             Self::V1_18_30 => write!(f, "1.18.30"),
+            Self::V1_19_60 => write!(f, "1.19.60"),
+            Self::V1_20_80 => write!(f, "1.20.80"),
             Self::V1_21_20 => write!(f, "1.21.20"),
             Self::V1_21_110 => write!(f, "1.21.110"),
             Self::V26_0_24 => write!(f, "26.0.24"),
+            Self::V26_10_20 => write!(f, "26.10.20"),
+            Self::V26_50_26 => write!(f, "26.50.26"),
         }
     }
 }
@@ -81,12 +87,12 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             });
         }
         let version: u64 = buffer.gread_with(&mut offset, LE)?;
-        if version == 23 && ctx != MinecraftVersion::V26_0_24 {
-            return Err(scroll::Error::BadInput {
-                size: offset,
-                msg: "Wrong material bin version",
-            });
-        }
+        // if version == 23 && ctx != MinecraftVersion::V26_0_24 {
+        //     return Err(scroll::Error::BadInput {
+        //         size: offset,
+        //         msg: "Wrong material bin version",
+        //     });
+        // }
         let encryption_variant: EncryptionVariant = buffer.gread(&mut offset)?;
         if encryption_variant.is_encrypted() {
             return Err(scroll::Error::BadInput {
@@ -172,7 +178,8 @@ impl CompiledMaterialDefinition {
         let ver: u64 = match version {
             v if v <= MinecraftVersion::V1_21_110 => 22,
             MinecraftVersion::V26_0_24 => 23,
-            // MinecraftVersion::V26_10_20 => 25,
+            MinecraftVersion::V26_10_20 => 25,
+            MinecraftVersion::V26_50_26 => 26,
             _ => self.version,
         };
         writer.write_u64::<LittleEndian>(ver)?;
