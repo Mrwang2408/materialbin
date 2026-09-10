@@ -22,6 +22,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
     type Error = scroll::Error;
     fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
+        // println!("bitset");
         let bitset = if ctx == MinecraftVersion::V1_18_30 {
             let has_bitset = buffer.gread_with::<u8>(&mut offset, LE)? == 15;
             // rewind
@@ -37,13 +38,14 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
             read_string(buffer, &mut offset)?
         };
         let fallback = read_string(buffer, &mut offset)?;
+        // println!("default_blendmode");
         let mut default_blendmode: Option<BlendMode> = None;
         let has_blendmode = read_bool(buffer, &mut offset)?;
         if has_blendmode {
             default_blendmode = Some(buffer.gread_with(&mut offset, ())?);
         }
         let flag_dvalue_count: u16 = buffer.gread_with(&mut offset, LE)?;
-        let mut default_flag_values = IndexMap::with_capacity(flag_dvalue_count.into());        
+        let mut default_flag_values = IndexMap::with_capacity(flag_dvalue_count.into());
         for _ in 0..flag_dvalue_count {
             let key = read_string(buffer, &mut offset)?;
             let vcount: u16 = if ctx >= MinecraftVersion::V26_50_26 {
@@ -56,10 +58,24 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
                 .collect::<Result<_, _>>()?;
             default_flag_values.insert(key, values);
         }
+        // for _ in 0..flag_dvalue_count {
+        //     let key = read_string(buffer, &mut offset)?;
+        //     if ctx >= MinecraftVersion::V26_50_26 {
+        //         let vcount: u16 = buffer.gread_with(&mut offset, LE)?;
+        //         let values: Vec<String> = (0..vcount)
+        //             .map(|_| read_string(buffer, &mut offset))
+        //             .collect::<Result<_, _>>()?;
+        //         default_flag_values.insert(key, values);
+        //     } else {
+        //         let value = read_string(buffer, &mut offset)?;
+        //         default_flag_values.insert(key, vec![value]);
+        //     }
+        // }
         let mut framebuffer_binding: Option<u32> = None;
         if ctx >= MinecraftVersion::V26_0_24 {
             framebuffer_binding = Some(buffer.gread_with(&mut offset, LE)?);
         }
+        // println!("variants");
         let variant_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let variants: Vec<Variant> = (0..variant_count)
             .flat_map(|_| buffer.gread(&mut offset))
@@ -96,21 +112,22 @@ impl Pass {
         let len = self.default_flag_values.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
         for (key, values) in self.default_flag_values.iter() {
+            
+            write_string(key, writer)?;
+
             if version >= MinecraftVersion::V26_50_26 {
-                write_string(key, writer)?;
-
-                // writer.write_u16::<LittleEndian>(values.len().try_into()?)?;
-                // for value in values {
-                //     write_string(value, writer)?;
-                // }
-                
-                writer.write_u16::<LittleEndian>(2)?;  //huh
-                write_string("Off", writer)?;          //huh
-                write_string("On", writer)?;           //huh
-
+                if values.len() > 1 {
+                    writer.write_u16::<LittleEndian>(values.len().try_into()?)?;
+                    for value in values {
+                        write_string(value, writer)?;
+                    }
+                } else {
+                    writer.write_u16::<LittleEndian>(2)?;  //huh
+                    write_string("Off", writer)?;          //huh
+                    write_string("On", writer)?;           //huh
+                }
             } else {
-                write_string(key, writer)?;
-                write_string(&values[0], writer)?;
+                write_string(&values[0], writer)?;         //fallback
             }
         }
         if version >= MinecraftVersion::V26_0_24 {

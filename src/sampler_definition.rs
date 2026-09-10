@@ -10,18 +10,17 @@ use crate::{
 
 #[derive(Debug)]
 pub struct SamplerDefinition {
-    pub reg: u16,
+    pub register_slot: u16,
     pub access: SamplerAccess,
     pub precision: Precision,
-    pub allow_unordered_access: u8,
+    pub unordered_access: u8,
     pub sampler_type: SamplerType,
     pub texture_format: String,
-    pub unknown_int: u32,
-    pub unknown_byte: u8,
+    pub slot_count: u32,
+    pub binding_slot: u8,
     pub sampler_state: Option<u8>,
-
     pub default_texture: Option<String>,
-    pub unknown_string: Option<String>,
+    pub texture_path: Option<String>,
     pub custom_type_info: Option<CustomTypeInfo>,
     pub unknown_u32: u32,
 }
@@ -29,22 +28,23 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
     type Error = scroll::Error;
     fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
-        let reg: u16 = if ctx == MinecraftVersion::V1_18_30 {
+        let register_slot: u16 = if ctx == MinecraftVersion::V1_18_30 {
             buffer.gread::<u8>(&mut offset)?.into()
         } else {
             buffer.gread_with(&mut offset, LE)?
         };
+        // println!("SamplerAccess");
         let access: SamplerAccess = buffer.gread_with(&mut offset, ())?;       //u8
         let precision: Precision = buffer.gread_with(&mut offset, ())?;        //u8
-        let allow_unordered_access: u8 = buffer.gread_with(&mut offset, LE)?;  //u8
+        let unordered_access: u8 = buffer.gread_with(&mut offset, LE)?;        //u8
         let sampler_type: SamplerType = buffer.gread_with(&mut offset, ctx)?;  //u8
         let texture_format = read_string(buffer, &mut offset)?;
-
-        let unknown_int: u32 = buffer.gread_with(&mut offset, LE)?;
-        let unknown_byte: u8 = if ctx != MinecraftVersion::V1_18_30 {
+        let slot_count: u32 = buffer.gread_with(&mut offset, LE)?;
+        // println!("binding_slot");
+        let binding_slot: u8 = if ctx != MinecraftVersion::V1_18_30 {
             buffer.gread_with(&mut offset, LE)?
         } else {
-            reg.try_into()
+            register_slot.try_into()
                 .map_err(|e| scroll::Error::Custom(format!("unknown byte parsing error: {e}")))?
         };
         let mut sampler_state = None;
@@ -58,11 +58,12 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
         if has_default_texture {
             default_texture = Some(read_string(buffer, &mut offset)?);
         }
-        let mut unknown_string = None;
+        // println!("texture_path");
+        let mut texture_path = None;
         if ctx >= MinecraftVersion::V1_20_80 {
-            let has_unknown_string = read_bool(buffer, &mut offset)?;
-            if has_unknown_string {
-                unknown_string = Some(read_string(buffer, &mut offset)?);
+            let has_texture_path = read_bool(buffer, &mut offset)?;
+            if has_texture_path {
+                texture_path = Some(read_string(buffer, &mut offset)?);
             }
         }
         let mut custom_type_info: Option<CustomTypeInfo> = None;
@@ -76,21 +77,20 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
         } else{
             0
         };
-
+        
         Ok((
             Self {
-                reg,
+                register_slot,
                 access,
                 precision,
-                allow_unordered_access,
+                unordered_access,
                 sampler_type,
                 texture_format,
-                unknown_int,
-                unknown_byte,
+                slot_count,
+                binding_slot,
                 sampler_state,
-
                 default_texture,
-                unknown_string,
+                texture_path,
                 custom_type_info,
                 unknown_u32,
             },
@@ -104,18 +104,18 @@ impl SamplerDefinition {
         W: Write,
     {
         if version == MinecraftVersion::V1_18_30 {
-            writer.write_u8(self.reg.try_into()?)?;
+            writer.write_u8(self.register_slot.try_into()?)?;
         } else {
-            writer.write_u16::<LittleEndian>(self.reg)?;
+            writer.write_u16::<LittleEndian>(self.register_slot)?;
         }
         writer.write_u8(self.access.as_u8())?;
         writer.write_u8(self.precision as u8)?;
-        writer.write_u8(self.allow_unordered_access)?;
+        writer.write_u8(self.unordered_access)?;
         writer.write_u8(self.sampler_type.to_u8(version)?)?;
         write_string(&self.texture_format, writer)?;
-        writer.write_u32::<LittleEndian>(self.unknown_int)?;
+        writer.write_u32::<LittleEndian>(self.slot_count)?;
         if version != MinecraftVersion::V1_18_30 {
-            writer.write_u8(self.unknown_byte)?;
+            writer.write_u8(self.binding_slot)?;
         }
         if version >= MinecraftVersion::V1_21_20 {
             optional_write(writer, self.sampler_state, |o, v| o.write_u8(v))?;
@@ -124,7 +124,7 @@ impl SamplerDefinition {
             write_string(v, o)
         })?;
         if version >= MinecraftVersion::V1_20_80 {
-            optional_write(writer, self.unknown_string.as_deref(), |o, v| {
+            optional_write(writer, self.texture_path.as_deref(), |o, v| {
                 write_string(v, o)
             })?;
         }

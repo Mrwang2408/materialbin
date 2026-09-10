@@ -102,7 +102,6 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
                 });
             }
         }
-
         let encryption_variant: EncryptionVariant = buffer.gread(&mut offset)?;
         if encryption_variant.is_encrypted() {
             return Err(scroll::Error::BadInput {
@@ -111,11 +110,13 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             });
         }
         let name = read_string(buffer, &mut offset)?;
+        // println!("Name: {name}");
         let mut parent_name = None;
         let has_parent_name = read_bool(buffer, &mut offset)?;
         if has_parent_name {
             parent_name = Some(read_string(buffer, &mut offset)?);
         }
+        // println!("sampler_definitions");
         let sampler_definition_count: u8 = buffer.gread_with(&mut offset, LE)?;
         let mut sampler_definitions = IndexMap::with_capacity(sampler_definition_count.into());
         for _ in 0..sampler_definition_count {
@@ -123,6 +124,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             let sampler_definition: SamplerDefinition = buffer.gread_with(&mut offset, ctx)?;
             sampler_definitions.insert(name, sampler_definition);
         }
+        // println!("property_fields");
         let property_field_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let mut property_fields = IndexMap::with_capacity(property_field_count.into());
         for _ in 0..property_field_count {
@@ -130,8 +132,10 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             let property_field: PropertyField = buffer.gread(&mut offset)?;
             property_fields.insert(name, property_field);
         }
+        
         // uniform_overrides is present starting in newer versions; declare it here so it's
         // available regardless of the conditional parsing branch.
+        // println!("uniform_overrides");
         let mut uniform_overrides: IndexMap<String, String> = IndexMap::new();
         if ctx >= MinecraftVersion::V1_21_110 && name != "Core/Builtins" {
             let builtin_count: u16 = buffer.gread_with(&mut offset, LE)?;
@@ -142,13 +146,16 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
                 uniform_overrides.insert(uniform_name, override_id);
             }
         }
+        // println!("passes");
         let pass_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let mut passes = IndexMap::with_capacity(pass_count.into());
         for _ in 0..pass_count {
             let name = read_string(buffer, &mut offset)?;
+            // println!("Pass: {name}");
             let pass: Pass = buffer.gread_with(&mut offset, ctx)?;
             passes.insert(name, pass);
         }
+        // println!("ending");
         // Just so we parse the whole thing
         if buffer.gread_with::<u64>(&mut offset, LE)? != MAGIC {
             return Err(scroll::Error::BadInput {
