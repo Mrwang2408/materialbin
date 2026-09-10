@@ -23,6 +23,7 @@ pub struct SamplerDefinition {
     pub default_texture: Option<String>,
     pub unknown_string: Option<String>,
     pub custom_type_info: Option<CustomTypeInfo>,
+    pub unknown_u32: u32,
 }
 impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
     type Error = scroll::Error;
@@ -33,10 +34,10 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
         } else {
             buffer.gread_with(&mut offset, LE)?
         };
-        let access: SamplerAccess = buffer.gread_with(&mut offset, ())?;
-        let precision: Precision = buffer.gread_with(&mut offset, ())?;
-        let allow_unordered_access: u8 = buffer.gread_with(&mut offset, LE)?;
-        let sampler_type: SamplerType = buffer.gread_with(&mut offset, ctx)?;
+        let access: SamplerAccess = buffer.gread_with(&mut offset, ())?;       //u8
+        let precision: Precision = buffer.gread_with(&mut offset, ())?;        //u8
+        let allow_unordered_access: u8 = buffer.gread_with(&mut offset, LE)?;  //u8
+        let sampler_type: SamplerType = buffer.gread_with(&mut offset, ctx)?;  //u8
         let texture_format = read_string(buffer, &mut offset)?;
 
         let unknown_int: u32 = buffer.gread_with(&mut offset, LE)?;
@@ -70,6 +71,12 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
             custom_type_info = Some(buffer.gread_with(&mut offset, ())?)
         }
 
+        let unknown_u32: u32 = if ctx >= MinecraftVersion::V26_60_22 {
+             buffer.gread_with(&mut offset, LE)?
+        } else{
+            0
+        };
+
         Ok((
             Self {
                 reg,
@@ -85,6 +92,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
                 default_texture,
                 unknown_string,
                 custom_type_info,
+                unknown_u32,
             },
             offset,
         ))
@@ -121,6 +129,10 @@ impl SamplerDefinition {
             })?;
         }
         optional_write(writer, self.custom_type_info.as_ref(), |o, v| v.write(o))?;
+              
+        if version >= MinecraftVersion::V26_60_22 {
+            writer.write_u32::<LittleEndian>(self.unknown_u32)?;
+        }
 
         Ok(())
     }
