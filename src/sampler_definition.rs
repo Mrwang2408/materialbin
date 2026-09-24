@@ -18,11 +18,11 @@ pub struct SamplerDefinition {
     pub texture_format: String,
     pub slot_count: u32,
     pub binding_slot: u8,
+    pub unknown_u32: u32,
     pub sampler_state: Option<u8>,
     pub default_texture: Option<String>,
     pub texture_path: Option<String>,
     pub custom_type_info: Option<CustomTypeInfo>,
-    pub unknown_u32: u32,
 }
 impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
     type Error = scroll::Error;
@@ -47,6 +47,13 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
             register_slot.try_into()
                 .map_err(|e| scroll::Error::Custom(format!("unknown byte parsing error: {e}")))?
         };
+        
+        let unknown_u32: u32 = if ctx >= MinecraftVersion::V26_60_22 {
+             buffer.gread_with(&mut offset, LE)?
+        } else{
+            0
+        };
+
         let mut sampler_state = None;
         if ctx >= MinecraftVersion::V1_21_20 {
             if read_bool(buffer, &mut offset)? {
@@ -72,12 +79,6 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
             custom_type_info = Some(buffer.gread_with(&mut offset, ())?)
         }
 
-        let unknown_u32: u32 = if ctx >= MinecraftVersion::V26_60_22 {
-             buffer.gread_with(&mut offset, LE)?
-        } else{
-            0
-        };
-        
         Ok((
             Self {
                 register_slot,
@@ -88,11 +89,11 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
                 texture_format,
                 slot_count,
                 binding_slot,
+                unknown_u32,
                 sampler_state,
                 default_texture,
                 texture_path,
                 custom_type_info,
-                unknown_u32,
             },
             offset,
         ))
@@ -117,6 +118,11 @@ impl SamplerDefinition {
         if version != MinecraftVersion::V1_18_30 {
             writer.write_u8(self.binding_slot)?;
         }
+
+        if version >= MinecraftVersion::V26_60_22 {
+            writer.write_u32::<LittleEndian>(self.unknown_u32)?;
+        }
+
         if version >= MinecraftVersion::V1_21_20 {
             optional_write(writer, self.sampler_state, |o, v| o.write_u8(v))?;
         }
@@ -129,10 +135,6 @@ impl SamplerDefinition {
             })?;
         }
         optional_write(writer, self.custom_type_info.as_ref(), |o, v| v.write(o))?;
-              
-        if version >= MinecraftVersion::V26_60_22 {
-            writer.write_u32::<LittleEndian>(self.unknown_u32)?;
-        }
 
         Ok(())
     }

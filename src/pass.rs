@@ -109,23 +109,37 @@ impl Pass {
         optional_write(writer, self.default_blendmode.as_ref(), |o, v| {
             o.write_u16::<LittleEndian>(v.as_u16())
         })?;
-        let len = self.default_flag_values.len().try_into()?;
+        let len = self.default_flag_values.len().try_into()?;  // flag_domain
         writer.write_u16::<LittleEndian>(len)?;
-        for (key, values) in self.default_flag_values.iter() {
-            
-            write_string(key, writer)?;
 
-            if version >= MinecraftVersion::V26_50_26 {
-                if values.len() > 1 {
-                    writer.write_u16::<LittleEndian>(values.len().try_into()?)?;
-                    for value in values {
-                        write_string(value, writer)?;
-                    }
-                } else {
-                    writer.write_u16::<LittleEndian>(2)?;  //huh
-                    write_string("Off", writer)?;          //huh
-                    write_string("On", writer)?;           //huh
+        // let mut flag_domain: IndexMap<String, Vec<String>> = IndexMap::new();
+        let mut flag_domain = self.default_flag_values.clone();
+        for variant in self.variants.iter() {
+            for (k, v) in &variant.flags {
+                let entry = flag_domain.entry(k.clone()).or_default();
+                if !entry.iter().any(|x| x == v) {
+                    entry.push(v.clone());
                 }
+            }
+        }
+        for (key, values) in self.default_flag_values.iter() {
+            write_string(key, writer)?;
+            if version >= MinecraftVersion::V26_50_26 {
+                let values = &flag_domain[key];     // pick form collected domains
+                writer.write_u16::<LittleEndian>(values.len().try_into()?)?;
+                for value in values {
+                    write_string(value, writer)?;
+                }
+                // if values.len() > 1 {
+                //     writer.write_u16::<LittleEndian>(values.len().try_into()?)?;
+                //     for value in values {
+                //         write_string(value, writer)?;
+                //     }
+                // } else {
+                //     writer.write_u16::<LittleEndian>(2)?;  //huh
+                //     write_string("Off", writer)?;          //huh
+                //     write_string("On", writer)?;           //huh
+                // }
             } else {
                 write_string(&values[0], writer)?;         //fallback
             }
