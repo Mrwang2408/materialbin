@@ -58,19 +58,6 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
                 .collect::<Result<_, _>>()?;
             default_flag_values.insert(key, values);
         }
-        // for _ in 0..flag_dvalue_count {
-        //     let key = read_string(buffer, &mut offset)?;
-        //     if ctx >= MinecraftVersion::V26_50_26 {
-        //         let vcount: u16 = buffer.gread_with(&mut offset, LE)?;
-        //         let values: Vec<String> = (0..vcount)
-        //             .map(|_| read_string(buffer, &mut offset))
-        //             .collect::<Result<_, _>>()?;
-        //         default_flag_values.insert(key, values);
-        //     } else {
-        //         let value = read_string(buffer, &mut offset)?;
-        //         default_flag_values.insert(key, vec![value]);
-        //     }
-        // }
         let mut framebuffer_binding: Option<u32> = None;
         if ctx >= MinecraftVersion::V26_0_24 {
             framebuffer_binding = Some(buffer.gread_with(&mut offset, LE)?);
@@ -109,10 +96,9 @@ impl Pass {
         optional_write(writer, self.default_blendmode.as_ref(), |o, v| {
             o.write_u16::<LittleEndian>(v.as_u16())
         })?;
-        let len = self.default_flag_values.len().try_into()?;  // flag_domain
+        let len = self.default_flag_values.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
 
-        // let mut flag_domain: IndexMap<String, Vec<String>> = IndexMap::new();
         let mut flag_domain = self.default_flag_values.clone();
         for variant in self.variants.iter() {
             for (k, v) in &variant.flags {
@@ -125,23 +111,13 @@ impl Pass {
         for (key, values) in self.default_flag_values.iter() {
             write_string(key, writer)?;
             if version >= MinecraftVersion::V26_50_26 {
-                let values = &flag_domain[key];     // pick form collected domains
+                let values = &flag_domain[key];
                 writer.write_u16::<LittleEndian>(values.len().try_into()?)?;
                 for value in values {
                     write_string(value, writer)?;
                 }
-                // if values.len() > 1 {
-                //     writer.write_u16::<LittleEndian>(values.len().try_into()?)?;
-                //     for value in values {
-                //         write_string(value, writer)?;
-                //     }
-                // } else {
-                //     writer.write_u16::<LittleEndian>(2)?;  //huh
-                //     write_string("Off", writer)?;          //huh
-                //     write_string("On", writer)?;           //huh
-                // }
             } else {
-                write_string(&values[0], writer)?;         //fallback
+                write_string(&values[0], writer)?;
             }
         }
         if version >= MinecraftVersion::V26_0_24 {
